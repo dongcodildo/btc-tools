@@ -28,23 +28,24 @@ def get_wordlist():
     return set(wl.m_words_to_idx.keys())
 
 
-def prompt_words(num_words):
+def prompt_words(num_words, prompt_file=None):
     """Prompt the user for each seed word, validating against the BIP39 wordlist."""
+    out = prompt_file or sys.stdout
     wordlist = get_wordlist()
     words = []
-    print(f"\nEnter your {num_words}-word BIP39 seed phrase, one word at a time.\n")
+    print(f"\nEnter your {num_words}-word BIP39 seed phrase, one word at a time.\n", file=out)
     for i in range(1, num_words + 1):
         while True:
             try:
-                word = input(f"  Word {i}/{num_words}: ").strip().lower()
+                print(f"  Word {i}/{num_words}: ", end="", flush=True, file=out)
+                word = sys.stdin.readline().strip().lower()
+                if not word:
+                    raise EOFError
             except (EOFError, KeyboardInterrupt):
-                print("\nAborted.")
+                print("\nAborted.", file=out)
                 sys.exit(1)
-            if not word:
-                print("    (empty — try again)")
-                continue
             if word not in wordlist:
-                print(f"    '{word}' is not a valid BIP39 word. Try again.")
+                print(f"    '{word}' is not a valid BIP39 word. Try again.", file=out)
                 continue
             words.append(word)
             break
@@ -151,7 +152,7 @@ def main():
     )
     args = parser.parse_args()
 
-    words = prompt_words(args.words)
+    words = prompt_words(args.words, prompt_file=sys.stderr if args.json else None)
     mnemonic = validate_mnemonic(words)
     if not args.json:
         print("\nMnemonic is valid.")
