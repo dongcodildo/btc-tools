@@ -1,2 +1,3 @@
-bip-utils
-bit
+base58
+bech32
+ecdsa
