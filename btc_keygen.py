@@ -72,41 +72,31 @@ def derive_keys(mnemonic, network, show_private):
         bip44_coin = Bip44Coins.BITCOIN
         bip84_coin = Bip84Coins.BITCOIN
 
-    # BIP44: m/44'/0'/0'/0/0  (Legacy P2PKH)
-    bip44_acc = (
-        Bip44.FromSeed(seed, bip44_coin)
-        .Purpose()
-        .Coin()
-        .Account(0)
-        .Change(Bip44Changes.CHAIN_EXT)
-        .AddressIndex(0)
-    )
+    # Account-level keys for extended public keys
+    bip44_account = Bip44.FromSeed(seed, bip44_coin).Purpose().Coin().Account(0)
+    bip84_account = Bip84.FromSeed(seed, bip84_coin).Purpose().Coin().Account(0)
 
-    # BIP84: m/84'/0'/0'/0/0  (Native SegWit P2WPKH)
-    bip84_acc = (
-        Bip84.FromSeed(seed, bip84_coin)
-        .Purpose()
-        .Coin()
-        .Account(0)
-        .Change(Bip44Changes.CHAIN_EXT)
-        .AddressIndex(0)
-    )
+    # Address-level keys (index 0)
+    bip44_addr = bip44_account.Change(Bip44Changes.CHAIN_EXT).AddressIndex(0)
+    bip84_addr = bip84_account.Change(Bip44Changes.CHAIN_EXT).AddressIndex(0)
 
     print("\n" + "=" * 60)
     print(f"  Network : {network}")
     print("=" * 60)
 
     print(f"\n  BIP44 (m/44'/0'/0'/0/0) — Legacy")
-    print(f"  Address    : {bip44_acc.PublicKey().ToAddress()}")
-    print(f"  Public Key : {bip44_acc.PublicKey().RawCompressed().ToHex()}")
+    print(f"  Address    : {bip44_addr.PublicKey().ToAddress()}")
+    print(f"  Public Key : {bip44_addr.PublicKey().RawCompressed().ToHex()}")
+    print(f"  xpub       : {bip44_account.PublicKey().ToExtended()}")
     if show_private:
-        print(f"  Private Key (WIF): {bip44_acc.PrivateKey().ToWif()}")
+        print(f"  Private Key (WIF): {bip44_addr.PrivateKey().ToWif()}")
 
     print(f"\n  BIP84 (m/84'/0'/0'/0/0) — Native SegWit")
-    print(f"  Address    : {bip84_acc.PublicKey().ToAddress()}")
-    print(f"  Public Key : {bip84_acc.PublicKey().RawCompressed().ToHex()}")
+    print(f"  Address    : {bip84_addr.PublicKey().ToAddress()}")
+    print(f"  Public Key : {bip84_addr.PublicKey().RawCompressed().ToHex()}")
+    print(f"  zpub       : {bip84_account.PublicKey().ToExtended()}")
     if show_private:
-        print(f"  Private Key (WIF): {bip84_acc.PrivateKey().ToWif()}")
+        print(f"  Private Key (WIF): {bip84_addr.PrivateKey().ToWif()}")
 
     print()
 
