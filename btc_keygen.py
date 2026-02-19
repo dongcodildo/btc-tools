@@ -6,6 +6,7 @@ validates the mnemonic, and derives Bitcoin keys via BIP44 and BIP84.
 """
 
 import argparse
+import json
 import sys
 
 from bip_utils import (
@@ -61,7 +62,7 @@ def validate_mnemonic(words):
     return mnemonic
 
 
-def derive_keys(mnemonic, network, show_private):
+def derive_keys(mnemonic, network, show_private, output_json):
     """Derive and display BIP44 and BIP84 keys from the mnemonic."""
     seed = Bip39SeedGenerator(mnemonic, Bip39Languages.ENGLISH).Generate()
 
@@ -79,6 +80,28 @@ def derive_keys(mnemonic, network, show_private):
     # Address-level keys (index 0)
     bip44_addr = bip44_account.Change(Bip44Changes.CHAIN_EXT).AddressIndex(0)
     bip84_addr = bip84_account.Change(Bip44Changes.CHAIN_EXT).AddressIndex(0)
+
+    if output_json:
+        data = {
+            "network": network,
+            "bip44": {
+                "path": "m/44'/0'/0'/0/0",
+                "address": bip44_addr.PublicKey().ToAddress(),
+                "public_key": bip44_addr.PublicKey().RawCompressed().ToHex(),
+                "xpub": bip44_account.PublicKey().ToExtended(),
+            },
+            "bip84": {
+                "path": "m/84'/0'/0'/0/0",
+                "address": bip84_addr.PublicKey().ToAddress(),
+                "public_key": bip84_addr.PublicKey().RawCompressed().ToHex(),
+                "zpub": bip84_account.PublicKey().ToExtended(),
+            },
+        }
+        if show_private:
+            data["bip44"]["private_key_wif"] = bip44_addr.PrivateKey().ToWif()
+            data["bip84"]["private_key_wif"] = bip84_addr.PrivateKey().ToWif()
+        print(json.dumps(data, indent=2))
+        return
 
     print("\n" + "=" * 60)
     print(f"  Network : {network}")
@@ -121,12 +144,18 @@ def main():
         action="store_true",
         help="Display WIF private keys",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON format",
+    )
     args = parser.parse_args()
 
     words = prompt_words(args.words)
     mnemonic = validate_mnemonic(words)
-    print("\nMnemonic is valid.")
-    derive_keys(mnemonic, args.network, args.show_private)
+    if not args.json:
+        print("\nMnemonic is valid.")
+    derive_keys(mnemonic, args.network, args.show_private, args.json)
 
 
 if __name__ == "__main__":

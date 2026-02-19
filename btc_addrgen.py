@@ -52,7 +52,7 @@ def is_address_used(address, api_base):
     return tx_count > 0
 
 
-def find_unused_addresses(key, count):
+def find_unused_addresses(key, count, output_json):
     """Scan addresses sequentially, returning the first `count` unused ones."""
     bip_cls, coin, api_base = detect_key_type(key)
     ctx = bip_cls.FromExtendedKey(key, coin)
@@ -65,12 +65,17 @@ def find_unused_addresses(key, count):
         address = addr.PublicKey().ToAddress()
 
         if is_address_used(address, api_base):
-            print(f"  #{index}: {address} (used)")
+            if not output_json:
+                print(f"  #{index}: {address} (used)", file=sys.stderr)
         else:
-            print(f"  #{index}: {address}")
-            unused.append((index, address))
+            if not output_json:
+                print(f"  #{index}: {address}")
+            unused.append({"index": index, "address": address})
 
         index += 1
+
+    if output_json:
+        print(json.dumps(unused, indent=2))
 
     return unused
 
@@ -89,9 +94,14 @@ def main():
         default=1,
         help="Number of unused addresses to find (default: 1)",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON format",
+    )
     args = parser.parse_args()
 
-    find_unused_addresses(args.key, args.count)
+    find_unused_addresses(args.key, args.count, args.json)
 
 
 if __name__ == "__main__":
