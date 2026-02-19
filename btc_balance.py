@@ -16,6 +16,7 @@ Usage:
 
 import json
 import sys
+import time
 import urllib.request
 import urllib.error
 
@@ -38,11 +39,18 @@ def get_btc_price():
 
 def get_balance(address):
     url = f"{MEMPOOL_API}/address/{address}"
-    try:
-        resp = urllib.request.urlopen(url)
-        data = json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        print(f"Error querying {address}: HTTP {e.code}", file=sys.stderr)
+    for attempt in range(3):
+        try:
+            resp = urllib.request.urlopen(url)
+            data = json.loads(resp.read())
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            print(f"Error querying {address}: HTTP {e.code}", file=sys.stderr)
+            return None
+    else:
         return None
 
     chain = data["chain_stats"]
@@ -71,11 +79,12 @@ def parse_addresses(raw):
             for path in ("bip84", "bip44"):
                 if path in data and "address" in data[path]:
                     addresses.append((path.upper(), data[path]["address"]))
-        # btc_addrgen --json format
+        # btc_addrgen --json format (with optional chain field)
         elif isinstance(data, list):
             for item in data:
                 if isinstance(item, dict) and "address" in item:
-                    label = f"index {item.get('index', '?')}"
+                    chain = item.get("chain", "external")
+                    label = f"{chain}#{item.get('index', '?')}"
                     addresses.append((label, item["address"]))
         return addresses
     except json.JSONDecodeError:

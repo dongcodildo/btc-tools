@@ -20,6 +20,7 @@ import hmac
 import json
 import struct
 import sys
+import time
 import urllib.request
 import urllib.error
 
@@ -112,19 +113,59 @@ def derive_addresses(pub_key, chain_code, key_type, count, gap_limit=20):
     return unused
 
 
+def derive_all_with_balance(pub_key, chain_code, key_type, gap_limit=20):
+    """
+    Scan both external (0) and change (1) chains and return all addresses
+    that have a non-zero balance. Used for balance checking.
+    """
+    results = []
+    for chain_idx, chain_name in ((0, "external"), (1, "change")):
+        chain_pub, chain_cc = derive_child_pub(pub_key, chain_code, chain_idx)
+        consecutive = 0
+        index = 0
+        while consecutive < gap_limit:
+            child_pub, _ = derive_child_pub(chain_pub, chain_cc, index)
+            if key_type == "bip84":
+                address = pub_to_p2wpkh(child_pub)
+            else:
+                address = pub_to_p2pkh(child_pub)
+
+            used = is_address_used(address)
+            if used:
+                consecutive = 0
+                results.append({"chain": chain_name, "index": index, "address": address})
+            else:
+                consecutive += 1
+            index += 1
+
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Blockchain query
 # ---------------------------------------------------------------------------
 
 def is_address_used(address):
     url = f"{MEMPOOL_API}/address/{address}"
-    try:
-        resp = urllib.request.urlopen(url)
-        data = json.loads(resp.read())
-        return (data["chain_stats"]["tx_count"] + data["mempool_stats"]["tx_count"]) > 0
-    except urllib.error.HTTPError as e:
-        print(f"Error querying {address}: HTTP {e.code}", file=sys.stderr)
-        return False
+    for attempt in range(3):
+        try:
+            time.sleep(0.3)  # rate limit courtesy delay
+            resp = urllib.request.urlopen(url, timeout=15)
+            data = json.loads(resp.read())
+            return (data["chain_stats"]["tx_count"] + data["mempool_stats"]["tx_count"]) > 0
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < 2:
+                time.sleep(2 * (attempt + 1))
+                continue
+            print(f"Error querying {address}: HTTP {e.code}", file=sys.stderr)
+            return False
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2)
+                continue
+            print(f"Error querying {address}: {e}", file=sys.stderr)
+            return False
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +202,8 @@ def main():
                         help="Gap limit for address scanning (default: 20)")
     parser.add_argument("--json", action="store_true",
                         help="Output in JSON format")
+    parser.add_argument("--all-chains", action="store_true",
+                        help="Scan both external and change chains (for balance checking)")
     args = parser.parse_args()
 
     if args.key:
@@ -177,13 +220,21 @@ def main():
             key_str = raw
 
     pub_key, chain_code, key_type = decode_extended_key(key_str)
-    unused = derive_addresses(pub_key, chain_code, key_type, args.count, args.gap)
 
-    if args.json:
-        print(json.dumps(unused, indent=2))
+    if args.all_chains:
+        addresses = derive_all_with_balance(pub_key, chain_code, key_type, args.gap)
+        if args.json:
+            print(json.dumps(addresses, indent=2))
+        else:
+            for entry in addresses:
+                print(f"{entry['chain']}#{entry['index']}: {entry['address']}")
     else:
-        for entry in unused:
-            print(f"#{entry['index']}: {entry['address']}")
+        unused = derive_addresses(pub_key, chain_code, key_type, args.count, args.gap)
+        if args.json:
+            print(json.dumps(unused, indent=2))
+        else:
+            for entry in unused:
+                print(f"#{entry['index']}: {entry['address']}")
 
 
 if __name__ == "__main__":
