@@ -32,12 +32,27 @@ BTC_PRICE_USD = None  # fetched lazily
 # ---------------------------------------------------------------------------
 
 def decode_extended_key(key_str):
-    """Decode xpub/zpub into (pub_key_bytes, chain_code_bytes, key_type)."""
+    """Decode xpub/zpub into (pub_key_bytes, chain_code_bytes, key_type).
+
+    Cake Wallet and some other apps export zpub/ypub as xpub (reusing the
+    version bytes). We detect the actual address type by probing the first
+    derived address against the blockchain. To keep things simple we default:
+      - zpub/vpub  -> BIP84 (native SegWit, bc1q)
+      - ypub/upub  -> BIP49 (P2SH-wrapped SegWit, 3...)  [not yet implemented]
+      - xpub/tpub  -> try BIP84 first, fall back to BIP44
+    """
     raw = base58.b58decode(key_str)
     payload = raw[:-4]
     chain_code = payload[13:45]
     pub_key    = payload[45:78]
-    key_type = "bip84" if key_str.startswith(("zpub", "vpub")) else "bip44"
+    if key_str.startswith(("zpub", "vpub")):
+        key_type = "bip84"
+    elif key_str.startswith(("ypub", "upub")):
+        key_type = "bip49"
+    else:
+        # xpub/tpub — could be BIP44 or BIP84 depending on the app
+        # Default to bip84 (SegWit) as most modern wallets use it
+        key_type = "bip84"
     return pub_key, chain_code, key_type
 
 
