@@ -21,14 +21,13 @@ import json
 import struct
 import sys
 import time
-import urllib.request
-import urllib.error
+import requests
 
 import base58
 import bech32 as bech32lib
 import ecdsa
 
-MEMPOOL_API = "https://mempool.space/api"
+MEMPOOL_API = "https://blockstream.info/api"
 
 
 # ---------------------------------------------------------------------------
@@ -150,18 +149,19 @@ def is_address_used(address):
     for attempt in range(3):
         try:
             time.sleep(0.3)  # rate limit courtesy delay
-            resp = urllib.request.urlopen(url, timeout=15)
-            data = json.loads(resp.read())
-            return (data["chain_stats"]["tx_count"] + data["mempool_stats"]["tx_count"]) > 0
-        except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < 2:
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 429 and attempt < 2:
                 time.sleep(2 * (attempt + 1))
                 continue
-            print(f"Error querying {address}: HTTP {e.code}", file=sys.stderr)
+            resp.raise_for_status()
+            data = resp.json()
+            return (data["chain_stats"]["tx_count"] + data["mempool_stats"]["tx_count"]) > 0
+        except requests.exceptions.HTTPError as e:
+            print(f"Error querying {address}: HTTP {e.response.status_code}", file=sys.stderr)
             return False
         except Exception as e:
             if attempt < 2:
-                time.sleep(2)
+                time.sleep(1)
                 continue
             print(f"Error querying {address}: {e}", file=sys.stderr)
             return False
